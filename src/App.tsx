@@ -17,7 +17,7 @@ const ScrumControl: React.FC = () => {
   const addTask = () => {
     if (taskText.trim()) {
       if (editingTaskId !== null) {
-        // Edita uma task existente
+        // Edita uma task que já foi criada
         setTasks(
           tasks.map((task) =>
             task.id === editingTaskId ? { ...task, text: taskText } : task
