@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Login from './login/Login';  
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import axios from 'axios';
+import Login from './login/Login';
 
 interface Task {
   id: number;
@@ -9,39 +10,86 @@ interface Task {
   completed: boolean;
 }
 
+const API_URL = 'http://localhost:8080';  // URL do backend Flask
+
+// Componente ScrumControl
 const ScrumControl: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [taskText, setTaskText] = useState('');
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
 
-  const addTask = () => {
-    if (taskText.trim()) {
-      if (editingTaskId !== null) {
-        // Edita uma task que já foi criada
-        setTasks(
-          tasks.map((task) =>
-            task.id === editingTaskId ? { ...task, text: taskText } : task
-          )
-        );
-        setEditingTaskId(null);
-      } else {
-        // Adiciona uma nova task
-        setTasks([...tasks, { id: Date.now(), text: taskText, completed: false }]);
-      }
-      setTaskText('');
+  
+  useEffect(() => {
+    const storedToken = localStorage.getItem('token');
+    setToken(storedToken);
+  }, []); 
+
+  useEffect(() => {
+    if (token) {
+      fetchTasks();  
+    }
+  }, [token]);
+
+  const fetchTasks = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/sprints`, {
+        headers: {
+          Authorization: `Bearer ${token}`, 
+        },
+      });
+      setTasks(response.data.sprints);
+    } catch (error) {
+      console.error('Erro ao buscar as tarefas:', error);
     }
   };
 
-  const completeTask = (id: number) => {
-    setTasks(
-      tasks.map((task) =>
-        task.id === id ? { ...task, completed: !task.completed } : task
-      )
-    );
+  const addTask = async () => {
+    if (taskText.trim()) {
+      try {
+        if (editingTaskId !== null) {
+          // Edita uma task que já foi criada
+          await axios.put(`${API_URL}/sprints/${editingTaskId}`, { nome: taskText }, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        } else {
+          // Adiciona uma nova task
+          await axios.post(`${API_URL}/sprints`, { nome: taskText, descricao: taskText }, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        }
+        setTaskText('');
+        fetchTasks();  // Atualiza a lista de tasks
+        setEditingTaskId(null);
+      } catch (error) {
+        console.error('Erro ao adicionar ou editar a task:', error);
+      }
+    }
   };
 
-  const deleteTask = (id: number) => {
-    setTasks(tasks.filter((task) => task.id !== id));
+  const completeTask = async (id: number) => {
+    try {
+      await axios.put(`${API_URL}/sprints/${id}`, { completed: true }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      setTasks(tasks.map(task => 
+        task.id === id ? { ...task, completed: true } : task
+      ));
+    } catch (error) {
+      console.error('Erro ao completar a task:', error);
+    }
+  };
+
+  const deleteTask = async (id: number) => {
+    try {
+      await axios.delete(`${API_URL}/sprints/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      fetchTasks();  // Atualiza a lista de tasks
+    } catch (error) {
+      console.error('Erro ao deletar a task:', error);
+    }
   };
 
   const startEditing = (task: Task) => {
@@ -93,15 +141,18 @@ const ScrumControl: React.FC = () => {
   );
 };
 
+// Componente App com rotas
 const App: React.FC = () => {
+  const token = localStorage.getItem('token');
+  
   return (
-      <Router>
-          <Routes>
-              <Route path="/login" element={<Login />} />  {}
-              <Route path="/scrum" element={<ScrumControl />} />  {}
-              <Route path="/" element={<Login />} />  {}
-          </Routes>
-      </Router>
+    <Router>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/scrum" element={token ? <ScrumControl /> : <Navigate to="/login" />} />
+        <Route path="/" element={token ? <ScrumControl /> : <Navigate to="/login" />} />
+      </Routes>
+    </Router>
   );
 };
 
